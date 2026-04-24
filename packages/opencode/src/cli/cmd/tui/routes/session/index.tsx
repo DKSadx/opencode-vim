@@ -60,6 +60,7 @@ import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
+import { createCopyMode, type CopyRow, type CopyHighlight } from "./copy-mode"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
@@ -101,11 +102,13 @@ const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const context = createContext<{
   width: number
   sessionID: string
+  copyActive: () => boolean
   conceal: () => boolean
   showThinking: () => boolean
   showTimestamps: () => boolean
   showDetails: () => boolean
   showGenericToolOutput: () => boolean
+  showHints: () => boolean
   diffWrapMode: () => "word" | "none"
   providers: () => ReadonlyMap<string, Provider>
   sync: ReturnType<typeof useSync>
@@ -158,6 +161,24 @@ export function Session() {
   const [answerSoundSeeded, setAnswerSoundSeeded] = createSignal(false)
   const [seenCompletedAssistantID, setSeenCompletedAssistantID] = createSignal<string>()
 
+  let scroll!: ScrollBoxRenderable
+  let prompt: PromptRef | undefined
+
+  const cm = createCopyMode({
+    scroll: () => scroll,
+    messages,
+    parts: (id) => sync.data.part[id] ?? [],
+    thinking: () => kv.get("thinking_visibility", true),
+    details: () => kv.get("tool_details_visibility", true),
+    session: () => route.sessionID,
+    toBottom() {
+      setTimeout(() => {
+        if (!scroll || scroll.isDestroyed) return
+        scroll.scrollTo(scroll.scrollHeight)
+      }, 50)
+    },
+  })
+
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
@@ -170,6 +191,8 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const mini = createMemo(() => kv.get("ui_minimal", false))
+  const showHints = createMemo(() => !mini())
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -261,8 +284,6 @@ export function Session() {
   })
 
   let seeded = false
-  let scroll: ScrollBoxRenderable
-  let prompt: PromptRef | undefined
   const bind = (r: PromptRef | undefined) => {
     prompt = r
     promptRef.set(r)
@@ -712,7 +733,9 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        scroll.scrollBy(-scroll.height / 2)
+        const delta = Math.floor(scroll.height / 2)
+        scroll.scrollBy(-delta)
+        cm.clamp(-delta)
         dialog.clear()
       },
     },
@@ -723,7 +746,9 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        scroll.scrollBy(scroll.height / 2)
+        const delta = Math.floor(scroll.height / 2)
+        scroll.scrollBy(delta)
+        cm.clamp(delta)
         dialog.clear()
       },
     },
@@ -735,6 +760,7 @@ export function Session() {
       disabled: true,
       onSelect: (dialog) => {
         scroll.scrollBy(-1)
+        cm.clamp(-1)
         dialog.clear()
       },
     },
@@ -746,6 +772,7 @@ export function Session() {
       disabled: true,
       onSelect: (dialog) => {
         scroll.scrollBy(1)
+        cm.clamp(1)
         dialog.clear()
       },
     },
@@ -756,7 +783,9 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        scroll.scrollBy(-scroll.height / 4)
+        const delta = Math.floor(scroll.height / 4)
+        scroll.scrollBy(-delta)
+        cm.clamp(-delta)
         dialog.clear()
       },
     },
@@ -767,7 +796,9 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        scroll.scrollBy(scroll.height / 4)
+        const delta = Math.floor(scroll.height / 4)
+        scroll.scrollBy(delta)
+        cm.clamp(delta)
         dialog.clear()
       },
     },
@@ -1054,7 +1085,6 @@ export function Session() {
     }
   })
 
-  // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
 
   return (
@@ -1064,11 +1094,13 @@ export function Session() {
           return contentWidth()
         },
         sessionID: route.sessionID,
+        copyActive: cm.active,
         conceal,
         showThinking,
         showTimestamps,
         showDetails,
         showGenericToolOutput,
+        showHints,
         diffWrapMode,
         providers,
         sync,
@@ -1135,10 +1167,12 @@ export function Session() {
                               backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
                             >
                               <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
-                              <text fg={theme.textMuted}>
-                                <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
-                                restore
-                              </text>
+                              <Show when={showHints()}>
+                                <text fg={theme.textMuted}>
+                                  <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
+                                  restore
+                                </text>
+                              </Show>
                               <Show when={revert()!.diffFiles?.length}>
                                 <box marginTop={1}>
                                   <For each={revert()!.diffFiles}>
@@ -1166,6 +1200,12 @@ export function Session() {
                     </Match>
                     <Match when={message.role === "user"}>
                       <UserMessage
+                        copy={
+                          cm.row()?.kind === "user" && cm.row()?.id === message.id
+                            ? { line: cm.row()!.line, col: cm.state().col, visual: !!cm.state().visual }
+                            : undefined
+                        }
+                        highlights={cm.highlights().get(message.id) ?? []}
                         index={index()}
                         onMouseUp={() => {
                           if (renderer.getSelection()?.getSelectedText()) return
@@ -1184,6 +1224,8 @@ export function Session() {
                     </Match>
                     <Match when={message.role === "assistant"}>
                       <AssistantMessage
+                        copy={cm.row() ? { ...cm.row()!, col: cm.state().col, visual: !!cm.state().visual } : undefined}
+                        highlights={cm.highlights()}
                         last={lastAssistant()?.id === message.id}
                         message={message as AssistantMessage}
                         parts={sync.data.part[message.id] ?? []}
@@ -1216,6 +1258,7 @@ export function Session() {
                   <Prompt
                     visible={visible()}
                     ref={bind}
+                    copy={cm.prompt}
                     disabled={disabled()}
                     onSubmit={() => {
                       toBottom()
@@ -1270,6 +1313,8 @@ function UserMessage(props: {
   onMouseUp: () => void
   index: number
   pending?: string
+  copy?: { line: number; col: number; visual?: boolean }
+  highlights?: CopyHighlight[]
 }) {
   const ctx = use()
   const local = useLocal()
@@ -1300,7 +1345,7 @@ function UserMessage(props: {
         <box
           id={props.message.id}
           border={["left"]}
-          borderColor={color()}
+          borderColor={props.copy ? theme.text : color()}
           customBorderChars={SplitBorder.customBorderChars}
           marginTop={props.index === 0 ? 0 : 1}
         >
@@ -1318,6 +1363,30 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
+            <Show when={props.copy}>
+              <Show when={!props.copy?.visual}>
+                <box
+                  position="absolute"
+                  top={(props.copy?.line ?? 0) + 1}
+                  left={0}
+                  width="100%"
+                  height={1}
+                  backgroundColor={RGBA.fromInts(255, 255, 255, 15)}
+                />
+              </Show>
+              <box position="absolute" top={(props.copy?.line ?? 0) + 1} left={props.copy?.col ?? 0}>
+                <text fg={theme.text}>█</text>
+              </box>
+            </Show>
+            <For each={props.highlights ?? []}>
+              {(highlight) => (
+                <box position="absolute" top={highlight.line + 1} left={highlight.left}>
+                  <text bg={theme.text} fg={theme.background}>
+                    {highlight.text || " "}
+                  </text>
+                </box>
+              )}
+            </For>
             <text fg={theme.text}>{text()}</text>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
@@ -1370,7 +1439,13 @@ function UserMessage(props: {
   )
 }
 
-function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
+function AssistantMessage(props: {
+  message: AssistantMessage
+  parts: Part[]
+  last: boolean
+  copy?: CopyRow & { visual?: boolean }
+  highlights?: Map<string, CopyHighlight[]>
+}) {
   const ctx = use()
   const local = useLocal()
   const { theme } = useTheme()
@@ -1396,20 +1471,22 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     <>
       <For each={props.parts}>
         {(part, index) => {
-          const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+          const component = createMemo(() => PART_MAPPING[part.type])
           return (
             <Show when={component()}>
               <Dynamic
                 last={index() === props.parts.length - 1}
-                component={component()}
-                part={part as any}
+                component={component()!}
+                part={part as MappedPart}
                 message={props.message}
+                copy={props.copy}
+                highlights={props.highlights?.get(part.type === "tool" ? `tool-${part.id}` : `text-${part.id}`) ?? []}
               />
             </Show>
           )
         }}
       </For>
-      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
+      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task") && ctx.showHints()}>
         <box paddingTop={1} paddingLeft={3}>
           <text fg={theme.text}>
             {keybind.print("session_child_first")}
@@ -1461,13 +1538,21 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   )
 }
 
-const PART_MAPPING = {
+type MappedPart = TextPart | ToolPart | ReasoningPart
+
+const PART_MAPPING: Record<string, (props: any) => any> = {
   text: TextPart,
   tool: ToolPart,
   reasoning: ReasoningPart,
 }
 
-function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
+function ReasoningPart(props: {
+  last: boolean
+  part: ReasoningPart
+  message: AssistantMessage
+  copy?: CopyRow
+  highlights?: CopyHighlight[]
+}) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
   const content = createMemo(() => {
@@ -1500,12 +1585,42 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   )
 }
 
-function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
+function TextPart(props: {
+  last: boolean
+  part: TextPart
+  message: AssistantMessage
+  copy?: CopyRow & { visual?: boolean }
+  highlights?: CopyHighlight[]
+}) {
   const ctx = use()
   const { theme, syntax } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
+        <Show when={props.copy?.kind === "text" && props.copy.part === props.part.id}>
+          <Show when={!props.copy?.visual}>
+            <box
+              position="absolute"
+              top={props.copy?.line ?? 0}
+              left={0}
+              width="100%"
+              height={1}
+              backgroundColor={RGBA.fromInts(255, 255, 255, 15)}
+            />
+          </Show>
+          <box position="absolute" top={props.copy?.line ?? 0} left={props.copy?.col ?? 0}>
+            <text fg={theme.text}>█</text>
+          </box>
+        </Show>
+        <For each={props.highlights ?? []}>
+          {(highlight) => (
+            <box position="absolute" top={highlight.line} left={highlight.left}>
+              <text bg={theme.text} fg={theme.background}>
+                {highlight.text || " "}
+              </text>
+            </box>
+          )}
+        </For>
         <Switch>
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
@@ -1536,9 +1651,16 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 
 // Pending messages moved to individual tool pending functions
 
-function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
+function ToolPart(props: {
+  last: boolean
+  part: ToolPart
+  message: AssistantMessage
+  copy?: CopyRow & { visual?: boolean }
+  highlights?: CopyHighlight[]
+}) {
   const ctx = use()
   const sync = useSync()
+  const { theme } = useTheme()
 
   // Hide tool if showDetails is false and tool completed successfully
   const shouldHide = createMemo(() => {
@@ -1568,57 +1690,86 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     get part() {
       return props.part
     },
+    get copy() {
+      return props.copy
+    },
   }
 
   return (
     <Show when={!shouldHide()}>
-      <Switch>
-        <Match when={props.part.tool === "bash"}>
-          <Bash {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "glob"}>
-          <Glob {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "read"}>
-          <Read {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "grep"}>
-          <Grep {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "webfetch"}>
-          <WebFetch {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "codesearch"}>
-          <CodeSearch {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "websearch"}>
-          <WebSearch {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "write"}>
-          <Write {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "edit"}>
-          <Edit {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "task"}>
-          <Task {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "apply_patch"}>
-          <ApplyPatch {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "todowrite"}>
-          <TodoWrite {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "question"}>
-          <Question {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "skill"}>
-          <Skill {...toolprops} />
-        </Match>
-        <Match when={true}>
-          <GenericTool {...toolprops} />
-        </Match>
-      </Switch>
+      <box id={"tool-" + props.part.id}>
+        <Show when={props.copy?.kind === "tool" && props.copy.part === props.part.id}>
+          <Show when={!props.copy?.visual}>
+            <box
+              position="absolute"
+              top={props.copy?.line ?? 0}
+              left={0}
+              width="100%"
+              height={1}
+              backgroundColor={RGBA.fromInts(255, 255, 255, 15)}
+            />
+          </Show>
+          <box position="absolute" top={props.copy?.line ?? 0} left={props.copy?.col ?? 0}>
+            <text fg={theme.text}>█</text>
+          </box>
+        </Show>
+        <For each={props.highlights ?? []}>
+          {(highlight) => (
+            <box position="absolute" top={highlight.line} left={highlight.left}>
+              <text bg={theme.text} fg={theme.background}>
+                {highlight.text || " "}
+              </text>
+            </box>
+          )}
+        </For>
+        <Switch>
+          <Match when={props.part.tool === "bash"}>
+            <Bash {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "glob"}>
+            <Glob {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "read"}>
+            <Read {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "grep"}>
+            <Grep {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "webfetch"}>
+            <WebFetch {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "codesearch"}>
+            <CodeSearch {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "websearch"}>
+            <WebSearch {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "write"}>
+            <Write {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "edit"}>
+            <Edit {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "task"}>
+            <Task {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "apply_patch"}>
+            <ApplyPatch {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "todowrite"}>
+            <TodoWrite {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "question"}>
+            <Question {...toolprops} />
+          </Match>
+          <Match when={props.part.tool === "skill"}>
+            <Skill {...toolprops} />
+          </Match>
+          <Match when={true}>
+            <GenericTool {...toolprops} />
+          </Match>
+        </Switch>
+      </box>
     </Show>
   )
 }
@@ -1630,6 +1781,7 @@ type ToolProps<T> = {
   tool: string
   output?: string
   part: ToolPart
+  copy?: CopyRow
 }
 function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
@@ -1766,6 +1918,7 @@ function BlockTool(props: {
   children: JSX.Element
   onClick?: () => void
   part?: ToolPart
+  copy?: CopyRow
   spinner?: boolean
 }) {
   const { theme } = useTheme()
@@ -1774,7 +1927,7 @@ function BlockTool(props: {
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
-      border={["left"]}
+      border={props.copy?.kind === "tool" && props.copy.part === props.part?.id ? [] : ["left"]}
       paddingTop={1}
       paddingBottom={1}
       paddingLeft={2}
@@ -2064,6 +2217,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
   const { theme, syntax } = useTheme()
 
   const view = createMemo(() => {
+    if (ctx.copyActive()) return "unified"
     const diffStyle = ctx.tui.diff_style
     if (diffStyle === "stacked") return "unified"
     // Default to "auto" behavior
@@ -2118,6 +2272,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   const files = createMemo(() => props.metadata.files ?? [])
 
   const view = createMemo(() => {
+    if (ctx.copyActive()) return "unified"
     const diffStyle = ctx.tui.diff_style
     if (diffStyle === "stacked") return "unified"
     return ctx.width > 120 ? "split" : "unified"

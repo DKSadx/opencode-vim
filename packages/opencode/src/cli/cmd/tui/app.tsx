@@ -59,6 +59,7 @@ import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
+import { useVimEnabled } from "./component/vim"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 
@@ -257,6 +258,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     .finally(() => {
       setReady(true)
     })
+  const vim = useVimEnabled()
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
@@ -524,7 +526,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
-      title: "Variant cycle",
+      title: "Switch model variant",
       value: "variant.cycle",
       keybind: "variant_cycle",
       category: "Agent",
@@ -718,6 +720,24 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           if (!next) renderer.setTerminalTitle("")
           return next
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle vim mode",
+      value: "input.vim.toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("input_vim_mode", !vim())
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle minimal ui",
+      value: "ui.minimal.toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("ui_minimal", !kv.get("ui_minimal", false))
         dialog.clear()
       },
     },

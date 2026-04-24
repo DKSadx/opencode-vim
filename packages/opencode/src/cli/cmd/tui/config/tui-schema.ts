@@ -23,6 +23,16 @@ export const TuiOptions = z.object({
     .enum(["auto", "stacked"])
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+  vim: z.boolean().optional().describe("Enable vim-style input for the prompt"),
+  prompt_max_height: z
+    .number()
+    .int()
+    .min(1)
+    .max(50)
+    .optional()
+    .describe("Maximum number of rows the prompt input expands to"),
+  prompt_scrollbar: z.boolean().optional().describe("Show a scrollbar for the prompt input"),
+  vim_enter_submit: z.boolean().optional().describe("Submit prompt with Enter in vim insert and replace modes"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
   answer_sound: z.boolean().optional().describe("Play a short sound when an assistant answer completes"),
 })
