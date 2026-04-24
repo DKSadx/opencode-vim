@@ -126,6 +126,32 @@ test("loads tui config with the same precedence order as server config paths", a
   expect(config.diff_style).toBe("stacked")
 })
 
+test("defaults answer_sound to enabled when tui.json omits it", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ theme: "project", diff_style: "stacked" }, null, 2))
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+
+  expect(config.answer_sound).toBeUndefined()
+  expect(config.diff_style).toBe("stacked")
+})
+
+test("loads answer_sound when explicitly disabled in tui.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ answer_sound: false, theme: "project" }, null, 2))
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+
+  expect(config.answer_sound).toBe(false)
+  expect(config.theme).toBe("project")
+})
+
 test("migrates tui-specific keys from opencode.json when tui.json does not exist", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

@@ -24,6 +24,7 @@ export const TuiOptions = z.object({
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
+  answer_sound: z.boolean().optional().describe("Play a short sound when an assistant answer completes"),
 })
 
 export const TuiInfo = z

@@ -18,6 +18,7 @@ import { useRoute, useRouteData } from "@tui/context/route"
 import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
+import * as Sound from "@tui/util/sound"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { selectedForeground, useTheme } from "@tui/context/theme"
@@ -89,6 +90,7 @@ import { TuiPluginRuntime } from "../../plugin"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
+import { nextAnswerSoundState } from "./answer-sound"
 
 addDefaultParsers(parsers.parsers)
 
@@ -152,6 +154,9 @@ export function Session() {
   const lastAssistant = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant")
   })
+  const answerSoundEnabled = createMemo(() => tuiConfig.answer_sound !== false)
+  const [answerSoundSeeded, setAnswerSoundSeeded] = createSignal(false)
+  const [seenCompletedAssistantID, setSeenCompletedAssistantID] = createSignal<string>()
 
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
@@ -180,6 +185,24 @@ export function Session() {
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
   const toast = useToast()
   const sdk = useSDK()
+
+  createEffect(() => {
+    const last = lastAssistant()
+    const next = nextAnswerSoundState({
+      enabled: answerSoundEnabled(),
+      latestAssistantID: last?.id,
+      latestAssistantCompleted: !!last?.time.completed,
+      seenCompletedAssistantID: seenCompletedAssistantID(),
+      seeded: answerSoundSeeded(),
+    })
+
+    batch(() => {
+      setAnswerSoundSeeded(next.seeded)
+      setSeenCompletedAssistantID(next.seenCompletedAssistantID)
+    })
+
+    if (next.play) Sound.pulse()
+  })
 
   createEffect(() => {
     const sessionID = route.sessionID
