@@ -169,6 +169,21 @@ describe("nextAttentionRequestSoundState", () => {
     })
   })
 
+  test("does not replay when an older pending request remains after a newer one was seen", () => {
+    expect(
+      nextAttentionRequestSoundState({
+        enabled: true,
+        latestRequestID: "permission-r1",
+        seenRequestID: "permission-r2",
+        seeded: true,
+      }),
+    ).toEqual({
+      play: false,
+      seenRequestID: "permission-r2",
+      seeded: true,
+    })
+  })
+
   test("does not backfill on initial mount", () => {
     expect(
       nextAttentionRequestSoundState({
@@ -180,6 +195,21 @@ describe("nextAttentionRequestSoundState", () => {
     ).toEqual({
       play: false,
       seenRequestID: "r1",
+      seeded: true,
+    })
+  })
+
+  test("does not backfill on initial mount when the newest pending request is already present", () => {
+    expect(
+      nextAttentionRequestSoundState({
+        enabled: true,
+        latestRequestID: "permission-r2",
+        seenRequestID: "permission-r1",
+        seeded: false,
+      }),
+    ).toEqual({
+      play: false,
+      seenRequestID: "permission-r2",
       seeded: true,
     })
   })

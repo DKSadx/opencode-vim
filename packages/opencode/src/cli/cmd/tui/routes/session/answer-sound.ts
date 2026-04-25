@@ -91,7 +91,7 @@ export function nextAttentionRequestSoundState(input: {
     }
   }
 
-  if (input.seenRequestID === input.latestRequestID) {
+  if (input.seenRequestID && input.seenRequestID >= input.latestRequestID) {
     return {
       play: false,
       seenRequestID: input.seenRequestID,
