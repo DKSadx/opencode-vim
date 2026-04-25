@@ -61,3 +61,40 @@ export function nextAnswerSoundState(input: {
     seeded: true,
   }
 }
+
+export function nextAttentionRequestSoundState(input: {
+  enabled: boolean
+  latestRequestID?: string
+  seenRequestID?: string
+  seeded: boolean
+}) {
+  if (!input.latestRequestID) {
+    return {
+      play: false,
+      seenRequestID: input.seenRequestID,
+      seeded: true,
+    }
+  }
+
+  if (!input.seeded) {
+    return {
+      play: false,
+      seenRequestID: input.latestRequestID,
+      seeded: true,
+    }
+  }
+
+  if (input.seenRequestID === input.latestRequestID) {
+    return {
+      play: false,
+      seenRequestID: input.seenRequestID,
+      seeded: true,
+    }
+  }
+
+  return {
+    play: input.enabled,
+    seenRequestID: input.latestRequestID,
+    seeded: true,
+  }
+}

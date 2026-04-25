@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { nextAnswerSoundState } from "../../../src/cli/cmd/tui/routes/session/answer-sound"
+import {
+  nextAnswerSoundState,
+  nextAttentionRequestSoundState,
+} from "../../../src/cli/cmd/tui/routes/session/answer-sound"
 
 describe("nextAnswerSoundState", () => {
   test("plays when the latest assistant message newly completes", () => {
@@ -124,6 +127,83 @@ describe("nextAnswerSoundState", () => {
     ).toEqual({
       play: false,
       seenCompletedAssistantID: "a1",
+      seeded: true,
+    })
+  })
+})
+
+describe("nextAttentionRequestSoundState", () => {
+  test("plays when a new permission or question request appears", () => {
+    expect(
+      nextAttentionRequestSoundState({
+        enabled: true,
+        latestRequestID: "r1",
+        seenRequestID: undefined,
+        seeded: true,
+      }),
+    ).toEqual({
+      play: true,
+      seenRequestID: "r1",
+      seeded: true,
+    })
+  })
+
+  test("does not replay for the same request", () => {
+    expect(
+      nextAttentionRequestSoundState({
+        enabled: true,
+        latestRequestID: "r1",
+        seenRequestID: "r1",
+        seeded: true,
+      }),
+    ).toEqual({
+      play: false,
+      seenRequestID: "r1",
+      seeded: true,
+    })
+  })
+
+  test("does not backfill on initial mount", () => {
+    expect(
+      nextAttentionRequestSoundState({
+        enabled: true,
+        latestRequestID: "r1",
+        seenRequestID: undefined,
+        seeded: false,
+      }),
+    ).toEqual({
+      play: false,
+      seenRequestID: "r1",
+      seeded: true,
+    })
+  })
+
+  test("records the latest request when sound is disabled", () => {
+    expect(
+      nextAttentionRequestSoundState({
+        enabled: false,
+        latestRequestID: "r1",
+        seenRequestID: undefined,
+        seeded: true,
+      }),
+    ).toEqual({
+      play: false,
+      seenRequestID: "r1",
+      seeded: true,
+    })
+  })
+
+  test("keeps seeded state when no request is present", () => {
+    expect(
+      nextAttentionRequestSoundState({
+        enabled: true,
+        latestRequestID: undefined,
+        seenRequestID: "r1",
+        seeded: false,
+      }),
+    ).toEqual({
+      play: false,
+      seenRequestID: "r1",
       seeded: true,
     })
   })
