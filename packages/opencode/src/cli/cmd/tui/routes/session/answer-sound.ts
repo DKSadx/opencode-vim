@@ -1,3 +1,7 @@
+export function latestPendingRequestID(input: ReadonlyArray<{ id: string }>) {
+  return input.at(-1)?.id
+}
+
 export function nextAnswerSoundState(input: {
   enabled: boolean
   latestAssistantID?: string

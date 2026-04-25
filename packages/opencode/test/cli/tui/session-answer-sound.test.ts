@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  latestPendingRequestID,
   nextAnswerSoundState,
   nextAttentionRequestSoundState,
 } from "../../../src/cli/cmd/tui/routes/session/answer-sound"
@@ -211,5 +212,16 @@ describe("nextAttentionRequestSoundState", () => {
       seenRequestID: "r1",
       seeded: true,
     })
+  })
+})
+
+describe("latestPendingRequestID", () => {
+  test("returns the newest pending request instead of the first visible one", () => {
+    expect(
+      latestPendingRequestID([
+        { id: "permission-r1" },
+        { id: "permission-r2" },
+      ]),
+    ).toBe("permission-r2")
   })
 })

@@ -92,6 +92,7 @@ import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import {
+  latestPendingRequestID,
   nextAnswerSoundState,
   nextAttentionRequestSoundState,
 } from "./answer-sound"
@@ -163,10 +164,6 @@ export function Session() {
   const answerSoundEnabled = createMemo(() => tuiConfig.answer_sound !== false)
   const [answerSoundSeeded, setAnswerSoundSeeded] = createSignal(false)
   const [seenCompletedAssistantID, setSeenCompletedAssistantID] = createSignal<string>()
-  const [permissionSoundSeeded, setPermissionSoundSeeded] = createSignal(false)
-  const [seenPermissionRequestID, setSeenPermissionRequestID] = createSignal<string>()
-  const [questionSoundSeeded, setQuestionSoundSeeded] = createSignal(false)
-  const [seenQuestionRequestID, setSeenQuestionRequestID] = createSignal<string>()
   const readyForPrompt = createMemo(() => {
     if (session()?.parentID) return false
     if (!visible() || disabled()) return false
@@ -225,6 +222,27 @@ export function Session() {
   const toast = useToast()
   const sdk = useSDK()
 
+  function createAttentionRequestSound(requestID: () => string | undefined) {
+    const [seeded, setSeeded] = createSignal(false)
+    const [seenRequestID, setSeenRequestID] = createSignal<string>()
+
+    createEffect(() => {
+      const next = nextAttentionRequestSoundState({
+        enabled: answerSoundEnabled(),
+        latestRequestID: requestID(),
+        seenRequestID: seenRequestID(),
+        seeded: seeded(),
+      })
+
+      batch(() => {
+        setSeeded(next.seeded)
+        setSeenRequestID(next.seenRequestID)
+      })
+
+      if (next.play) Sound.pulse()
+    })
+  }
+
   createEffect(() => {
     const last = lastAssistant()
     const next = nextAnswerSoundState({
@@ -245,37 +263,8 @@ export function Session() {
     if (next.play) Sound.pulse()
   })
 
-  createEffect(() => {
-    const next = nextAttentionRequestSoundState({
-      enabled: answerSoundEnabled(),
-      latestRequestID: permissions()[0]?.id,
-      seenRequestID: seenPermissionRequestID(),
-      seeded: permissionSoundSeeded(),
-    })
-
-    batch(() => {
-      setPermissionSoundSeeded(next.seeded)
-      setSeenPermissionRequestID(next.seenRequestID)
-    })
-
-    if (next.play) Sound.pulse()
-  })
-
-  createEffect(() => {
-    const next = nextAttentionRequestSoundState({
-      enabled: answerSoundEnabled(),
-      latestRequestID: questions()[0]?.id,
-      seenRequestID: seenQuestionRequestID(),
-      seeded: questionSoundSeeded(),
-    })
-
-    batch(() => {
-      setQuestionSoundSeeded(next.seeded)
-      setSeenQuestionRequestID(next.seenRequestID)
-    })
-
-    if (next.play) Sound.pulse()
-  })
+  createAttentionRequestSound(() => latestPendingRequestID(permissions()))
+  createAttentionRequestSound(() => latestPendingRequestID(questions()))
 
   createEffect(() => {
     const sessionID = route.sessionID
