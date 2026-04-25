@@ -133,17 +133,32 @@ describe("nextAnswerSoundState", () => {
 })
 
 describe("nextAttentionRequestSoundState", () => {
-  test("plays when a new permission or question request appears", () => {
+  test("plays when a new permission request appears", () => {
     expect(
       nextAttentionRequestSoundState({
         enabled: true,
-        latestRequestID: "r1",
+        latestRequestID: "permission-r1",
         seenRequestID: undefined,
         seeded: true,
       }),
     ).toEqual({
       play: true,
-      seenRequestID: "r1",
+      seenRequestID: "permission-r1",
+      seeded: true,
+    })
+  })
+
+  test("plays when a new question request appears", () => {
+    expect(
+      nextAttentionRequestSoundState({
+        enabled: true,
+        latestRequestID: "question-r1",
+        seenRequestID: undefined,
+        seeded: true,
+      }),
+    ).toEqual({
+      play: true,
+      seenRequestID: "question-r1",
       seeded: true,
     })
   })
