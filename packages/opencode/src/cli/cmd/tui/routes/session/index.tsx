@@ -91,7 +91,10 @@ import { TuiPluginRuntime } from "../../plugin"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
-import { nextAnswerSoundState } from "./answer-sound"
+import {
+  nextAnswerSoundState,
+  nextAttentionRequestSoundState,
+} from "./answer-sound"
 
 addDefaultParsers(parsers.parsers)
 
@@ -160,6 +163,10 @@ export function Session() {
   const answerSoundEnabled = createMemo(() => tuiConfig.answer_sound !== false)
   const [answerSoundSeeded, setAnswerSoundSeeded] = createSignal(false)
   const [seenCompletedAssistantID, setSeenCompletedAssistantID] = createSignal<string>()
+  const [permissionSoundSeeded, setPermissionSoundSeeded] = createSignal(false)
+  const [seenPermissionRequestID, setSeenPermissionRequestID] = createSignal<string>()
+  const [questionSoundSeeded, setQuestionSoundSeeded] = createSignal(false)
+  const [seenQuestionRequestID, setSeenQuestionRequestID] = createSignal<string>()
   const readyForPrompt = createMemo(() => {
     if (session()?.parentID) return false
     if (!visible() || disabled()) return false
@@ -233,6 +240,38 @@ export function Session() {
     batch(() => {
       setAnswerSoundSeeded(next.seeded)
       setSeenCompletedAssistantID(next.seenCompletedAssistantID)
+    })
+
+    if (next.play) Sound.pulse()
+  })
+
+  createEffect(() => {
+    const next = nextAttentionRequestSoundState({
+      enabled: answerSoundEnabled(),
+      latestRequestID: permissions()[0]?.id,
+      seenRequestID: seenPermissionRequestID(),
+      seeded: permissionSoundSeeded(),
+    })
+
+    batch(() => {
+      setPermissionSoundSeeded(next.seeded)
+      setSeenPermissionRequestID(next.seenRequestID)
+    })
+
+    if (next.play) Sound.pulse()
+  })
+
+  createEffect(() => {
+    const next = nextAttentionRequestSoundState({
+      enabled: answerSoundEnabled(),
+      latestRequestID: questions()[0]?.id,
+      seenRequestID: seenQuestionRequestID(),
+      seeded: questionSoundSeeded(),
+    })
+
+    batch(() => {
+      setQuestionSoundSeeded(next.seeded)
+      setSeenQuestionRequestID(next.seenRequestID)
     })
 
     if (next.play) Sound.pulse()
