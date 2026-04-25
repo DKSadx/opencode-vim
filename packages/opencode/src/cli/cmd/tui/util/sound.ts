@@ -4,12 +4,10 @@ import { tmpdir } from "node:os"
 import { basename, join } from "node:path"
 import { Process } from "@/util"
 import { which } from "@/util/which"
-import pulseA from "../asset/pulse-a.wav" with { type: "file" }
-import pulseB from "../asset/pulse-b.wav" with { type: "file" }
-import pulseC from "../asset/pulse-c.wav" with { type: "file" }
+import blow from "../asset/Blow.aiff" with { type: "file" }
 import charge from "../asset/charge.wav" with { type: "file" }
 
-const FILE = [pulseA, pulseB, pulseC]
+const FILE = [blow]
 
 const HUM = charge
 const DIR = join(tmpdir(), "opencode-sfx")
