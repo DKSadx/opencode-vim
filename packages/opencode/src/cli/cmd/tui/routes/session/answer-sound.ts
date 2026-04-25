@@ -1,5 +1,8 @@
 export function latestPendingRequestID(input: ReadonlyArray<{ id: string }>) {
-  return input.at(-1)?.id
+  return input.reduce<string | undefined>((latest, item) => {
+    if (!latest || item.id > latest) return item.id
+    return latest
+  }, undefined)
 }
 
 export function nextAnswerSoundState(input: {

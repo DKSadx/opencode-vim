@@ -224,4 +224,14 @@ describe("latestPendingRequestID", () => {
       ]),
     ).toBe("permission-r2")
   })
+
+  test("returns the newest request id across flattened child session requests", () => {
+    expect(
+      latestPendingRequestID([
+        { id: "permission-r3" },
+        { id: "permission-r1" },
+        { id: "permission-r2" },
+      ]),
+    ).toBe("permission-r3")
+  })
 })
