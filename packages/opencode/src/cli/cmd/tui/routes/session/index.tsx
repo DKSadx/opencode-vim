@@ -160,6 +160,15 @@ export function Session() {
   const answerSoundEnabled = createMemo(() => tuiConfig.answer_sound !== false)
   const [answerSoundSeeded, setAnswerSoundSeeded] = createSignal(false)
   const [seenCompletedAssistantID, setSeenCompletedAssistantID] = createSignal<string>()
+  const readyForPrompt = createMemo(() => {
+    if (session()?.parentID) return false
+    if (!visible() || disabled()) return false
+    return children().every((item) => {
+      const status = sync.data.session_status[item.id]
+      if (status && status.type !== "idle") return false
+      return !(sync.data.message[item.id] ?? []).some((message) => message.role === "assistant" && !message.time.completed)
+    })
+  })
 
   let scroll!: ScrollBoxRenderable
   let prompt: PromptRef | undefined
@@ -215,6 +224,8 @@ export function Session() {
       enabled: answerSoundEnabled(),
       latestAssistantID: last?.id,
       latestAssistantCompleted: !!last?.time.completed,
+      latestAssistantFinal: !!last?.finish && !["tool-calls", "unknown"].includes(last.finish),
+      readyForPrompt: readyForPrompt(),
       seenCompletedAssistantID: seenCompletedAssistantID(),
       seeded: answerSoundSeeded(),
     })

@@ -8,6 +8,8 @@ describe("nextAnswerSoundState", () => {
         enabled: true,
         latestAssistantID: "a1",
         latestAssistantCompleted: true,
+        latestAssistantFinal: true,
+        readyForPrompt: true,
         seenCompletedAssistantID: undefined,
         seeded: true,
       }),
@@ -24,6 +26,8 @@ describe("nextAnswerSoundState", () => {
         enabled: true,
         latestAssistantID: "a1",
         latestAssistantCompleted: false,
+        latestAssistantFinal: false,
+        readyForPrompt: false,
         seenCompletedAssistantID: undefined,
         seeded: true,
       }),
@@ -40,6 +44,8 @@ describe("nextAnswerSoundState", () => {
         enabled: true,
         latestAssistantID: "a1",
         latestAssistantCompleted: true,
+        latestAssistantFinal: true,
+        readyForPrompt: true,
         seenCompletedAssistantID: "a1",
         seeded: true,
       }),
@@ -56,6 +62,8 @@ describe("nextAnswerSoundState", () => {
         enabled: false,
         latestAssistantID: "a1",
         latestAssistantCompleted: true,
+        latestAssistantFinal: true,
+        readyForPrompt: true,
         seenCompletedAssistantID: undefined,
         seeded: true,
       }),
@@ -72,8 +80,46 @@ describe("nextAnswerSoundState", () => {
         enabled: true,
         latestAssistantID: "a1",
         latestAssistantCompleted: true,
+        latestAssistantFinal: true,
+        readyForPrompt: true,
         seenCompletedAssistantID: undefined,
         seeded: false,
+      }),
+    ).toEqual({
+      play: false,
+      seenCompletedAssistantID: "a1",
+      seeded: true,
+    })
+  })
+
+  test("waits until the prompt is ready before playing", () => {
+    expect(
+      nextAnswerSoundState({
+        enabled: true,
+        latestAssistantID: "a1",
+        latestAssistantCompleted: true,
+        latestAssistantFinal: true,
+        readyForPrompt: false,
+        seenCompletedAssistantID: undefined,
+        seeded: true,
+      }),
+    ).toEqual({
+      play: false,
+      seenCompletedAssistantID: undefined,
+      seeded: true,
+    })
+  })
+
+  test("does not play for non-final completed assistant messages", () => {
+    expect(
+      nextAnswerSoundState({
+        enabled: true,
+        latestAssistantID: "a1",
+        latestAssistantCompleted: true,
+        latestAssistantFinal: false,
+        readyForPrompt: true,
+        seenCompletedAssistantID: undefined,
+        seeded: true,
       }),
     ).toEqual({
       play: false,

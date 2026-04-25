@@ -2,6 +2,8 @@ export function nextAnswerSoundState(input: {
   enabled: boolean
   latestAssistantID?: string
   latestAssistantCompleted: boolean
+  latestAssistantFinal: boolean
+  readyForPrompt: boolean
   seenCompletedAssistantID?: string
   seeded: boolean
 }) {
@@ -22,6 +24,22 @@ export function nextAnswerSoundState(input: {
   }
 
   if (!input.latestAssistantCompleted) {
+    return {
+      play: false,
+      seenCompletedAssistantID: input.seenCompletedAssistantID,
+      seeded: true,
+    }
+  }
+
+  if (!input.latestAssistantFinal) {
+    return {
+      play: false,
+      seenCompletedAssistantID: input.latestAssistantID,
+      seeded: true,
+    }
+  }
+
+  if (!input.readyForPrompt) {
     return {
       play: false,
       seenCompletedAssistantID: input.seenCompletedAssistantID,
