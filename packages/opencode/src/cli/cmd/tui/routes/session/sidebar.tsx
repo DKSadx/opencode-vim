@@ -5,6 +5,7 @@ import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../context/tui-config"
 import { InstallationChannel, InstallationVersion } from "@/installation/version"
 import { TuiPluginRuntime } from "../../plugin"
+import { CodexUsageSidebar } from "./codex-usage"
 
 import { getScrollAcceleration } from "../../util/scroll"
 
@@ -76,6 +77,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </Show>
               </box>
             </TuiPluginRuntime.Slot>
+            <CodexUsageSidebar />
             <TuiPluginRuntime.Slot name="sidebar_content" session_id={props.sessionID} />
           </box>
         </scrollbox>
