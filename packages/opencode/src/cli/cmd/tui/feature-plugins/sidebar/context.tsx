@@ -1,6 +1,7 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { createMemo } from "solid-js"
+import { createMemo, Show } from "solid-js"
+import { getSidebarLocation } from "./location"
 
 const id = "internal:sidebar-context"
 
@@ -24,6 +25,9 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
   const cost = createMemo(() => msg().reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0))
+  const location = createMemo(() =>
+    getSidebarLocation({ directory: props.api.state.path.directory, branch: props.api.state.vcs?.branch }),
+  )
 
   const state = createMemo(() => {
     const last = msg().findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
@@ -57,6 +61,16 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
           {state().tokens.toLocaleString()} tokens · {money.format(cost())} spent
         </text>
       </box>
+      <box gap={0} flexDirection="column">
+        <text fg={theme().text}>Path</text>
+        <text fg={theme().textMuted}>{location().path}</text>
+      </box>
+      <Show when={location().branch}>
+        <box gap={0} flexDirection="column">
+          <text fg={theme().text}>Branch</text>
+          <text fg={theme().textMuted}>{location().branch}</text>
+        </box>
+      </Show>
     </box>
   )
 }
