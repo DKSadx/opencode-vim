@@ -24,6 +24,7 @@ import { DialogProvider as DialogProviderList } from "@tui/component/dialog-prov
 import { ErrorComponent } from "@tui/component/error-component"
 import { PluginRouteMissing } from "@tui/component/plugin-route-missing"
 import { ProjectProvider } from "@tui/context/project"
+import { useProject } from "@tui/context/project"
 import { EditorContextProvider } from "@tui/context/editor"
 import { useEvent } from "@tui/context/event"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
@@ -66,6 +67,7 @@ import { FormatError, FormatUnknownError } from "@/cli/error"
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
+import { getStartupRouteAction } from "./startup-route"
 
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
@@ -216,6 +218,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const renderer = useRenderer()
   const dialog = useDialog()
   const local = useLocal()
+  const project = useProject()
   const kv = useKV()
   const command = useCommandDialog()
   const keybind = useKeybind()
@@ -380,6 +383,37 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         route.navigate({ type: "session", sessionID: match })
       }
     }
+  })
+
+  let started = false
+  createEffect(() => {
+    if (started) return
+
+    const next = getStartupRouteAction({
+      route: route.data,
+      args,
+      status: sync.status,
+      sessions: sync.data.session,
+    })
+
+    if (next.type === "none") return
+
+    started = true
+
+    if (next.type === "session") {
+      route.navigate(next)
+      return
+    }
+
+    void sdk.client.session.create({ workspace: project.workspace.current() }).then((result) => {
+      if (result.data?.id) {
+        route.navigate({ type: "session", sessionID: result.data.id })
+        return
+      }
+
+      started = false
+      toast.show({ message: "Failed to create session", variant: "error" })
+    })
   })
 
   // Handle --session with --fork: wait for sync to be fully complete before forking

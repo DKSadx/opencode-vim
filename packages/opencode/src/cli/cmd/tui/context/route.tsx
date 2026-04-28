@@ -4,6 +4,7 @@ import type { PromptInfo } from "../component/prompt/history"
 
 export type HomeRoute = {
   type: "home"
+  startup?: boolean
   prompt?: PromptInfo
 }
 
@@ -30,6 +31,7 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
           ? JSON.parse(process.env["OPENCODE_ROUTE"])
           : {
               type: "home",
+              startup: true,
             }),
     )
 
