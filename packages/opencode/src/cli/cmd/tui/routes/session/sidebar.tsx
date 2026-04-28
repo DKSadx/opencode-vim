@@ -77,7 +77,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </Show>
               </box>
             </TuiPluginRuntime.Slot>
-            <CodexUsageSidebar />
+            <CodexUsageSidebar sessionID={props.sessionID} />
             <TuiPluginRuntime.Slot name="sidebar_content" session_id={props.sessionID} />
           </box>
         </scrollbox>

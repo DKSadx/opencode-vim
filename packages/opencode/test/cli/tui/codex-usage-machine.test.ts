@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   codexStartupOptions,
   formatCodexReset,
+  nextCodexRefreshState,
   normalizeCodexBuckets,
   shouldShowCodexUsage,
   codexUsageView,
@@ -205,5 +206,67 @@ describe("codexStartupOptions", () => {
 describe("formatCodexReset", () => {
   test("formats reset timestamps as dd/mm/yyyy 24h time", () => {
     expect(formatCodexReset(1730947200)).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)
+  })
+})
+
+describe("nextCodexRefreshState", () => {
+  test("refreshes when the latest assistant answer newly completes", () => {
+    expect(
+      nextCodexRefreshState({
+        latestAssistantID: "a1",
+        latestAssistantCompleted: true,
+        seenCompletedAssistantID: undefined,
+        seeded: true,
+      }),
+    ).toEqual({
+      refresh: true,
+      seenCompletedAssistantID: "a1",
+      seeded: true,
+    })
+  })
+
+  test("does not refresh while the latest assistant answer is still running", () => {
+    expect(
+      nextCodexRefreshState({
+        latestAssistantID: "a1",
+        latestAssistantCompleted: false,
+        seenCompletedAssistantID: undefined,
+        seeded: true,
+      }),
+    ).toEqual({
+      refresh: false,
+      seenCompletedAssistantID: undefined,
+      seeded: true,
+    })
+  })
+
+  test("does not backfill a refresh on initial mount", () => {
+    expect(
+      nextCodexRefreshState({
+        latestAssistantID: "a1",
+        latestAssistantCompleted: true,
+        seenCompletedAssistantID: undefined,
+        seeded: false,
+      }),
+    ).toEqual({
+      refresh: false,
+      seenCompletedAssistantID: "a1",
+      seeded: true,
+    })
+  })
+
+  test("does not replay for the same completed assistant answer", () => {
+    expect(
+      nextCodexRefreshState({
+        latestAssistantID: "a1",
+        latestAssistantCompleted: true,
+        seenCompletedAssistantID: "a1",
+        seeded: true,
+      }),
+    ).toEqual({
+      refresh: false,
+      seenCompletedAssistantID: "a1",
+      seeded: true,
+    })
   })
 })
