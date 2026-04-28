@@ -132,6 +132,19 @@ export function nextCodexRefreshState(input: {
   }
 }
 
+export function nextCodexIntervalState(input: {
+  visible: boolean
+  connected: boolean
+  active: boolean
+}) {
+  const nextActive = input.visible && input.connected
+  return {
+    active: nextActive,
+    start: nextActive && !input.active,
+    stop: !nextActive && input.active,
+  }
+}
+
 export function shouldShowCodexUsage(providerID: string | undefined) {
   return providerID === "openai"
 }

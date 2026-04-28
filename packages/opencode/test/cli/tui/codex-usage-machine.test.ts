@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   codexStartupOptions,
   formatCodexReset,
+  nextCodexIntervalState,
   nextCodexRefreshState,
   normalizeCodexBuckets,
   shouldShowCodexUsage,
@@ -267,6 +268,64 @@ describe("nextCodexRefreshState", () => {
       refresh: false,
       seenCompletedAssistantID: "a1",
       seeded: true,
+    })
+  })
+})
+
+describe("nextCodexIntervalState", () => {
+  test("activates interval only when visible and connected", () => {
+    expect(
+      nextCodexIntervalState({
+        visible: true,
+        connected: true,
+        active: false,
+      }),
+    ).toEqual({
+      active: true,
+      start: true,
+      stop: false,
+    })
+  })
+
+  test("stops interval when connection is no longer connected", () => {
+    expect(
+      nextCodexIntervalState({
+        visible: true,
+        connected: false,
+        active: true,
+      }),
+    ).toEqual({
+      active: false,
+      start: false,
+      stop: true,
+    })
+  })
+
+  test("does not start interval when sidebar is hidden", () => {
+    expect(
+      nextCodexIntervalState({
+        visible: false,
+        connected: true,
+        active: false,
+      }),
+    ).toEqual({
+      active: false,
+      start: false,
+      stop: false,
+    })
+  })
+
+  test("stops interval when visibility turns off", () => {
+    expect(
+      nextCodexIntervalState({
+        visible: false,
+        connected: true,
+        active: true,
+      }),
+    ).toEqual({
+      active: false,
+      start: false,
+      stop: true,
     })
   })
 })
