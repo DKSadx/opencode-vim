@@ -9,6 +9,17 @@ const money = new Intl.NumberFormat("en-US", {
   currency: "USD",
 })
 
+function progress(percent: number) {
+  const filled = Math.max(0, Math.min(20, Math.round(percent / 5)))
+  return `${"█".repeat(filled)}${"░".repeat(20 - filled)}`
+}
+
+function progressColor(theme: TuiPluginApi["theme"]["current"], percent: number) {
+  if (percent > 80) return theme.error
+  if (percent > 50) return theme.warning
+  return theme.success
+}
+
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
@@ -33,13 +44,19 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   })
 
   return (
-    <box>
+    <box gap={1} flexDirection="column">
       <text fg={theme().text}>
         <b>Context</b>
       </text>
-      <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
-      <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
-      <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      <box gap={0} flexDirection="column">
+        <text fg={theme().text}>Usage</text>
+        <text fg={progressColor(theme(), state().percent ?? 0)}>
+          {progress(state().percent ?? 0)} {state().percent ?? 0}%
+        </text>
+        <text fg={theme().textMuted}>
+          {state().tokens.toLocaleString()} tokens · {money.format(cost())} spent
+        </text>
+      </box>
     </box>
   )
 }

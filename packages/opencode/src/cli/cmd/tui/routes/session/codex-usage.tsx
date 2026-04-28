@@ -14,8 +14,14 @@ import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 
 function progress(percent: number) {
-  const filled = Math.max(0, Math.min(10, Math.round(percent / 10)))
-  return `${"█".repeat(filled)}${"░".repeat(10 - filled)}`
+  const filled = Math.max(0, Math.min(20, Math.round(percent / 5)))
+  return `${"█".repeat(filled)}${"░".repeat(20 - filled)}`
+}
+
+function progressColor(theme: ReturnType<typeof useTheme>["theme"], percent: number) {
+  if (percent > 80) return theme.error
+  if (percent > 50) return theme.warning
+  return theme.success
 }
 
 export function CodexUsageSidebar(props: { sessionID: string }) {
@@ -147,7 +153,7 @@ export function CodexUsageSidebar(props: { sessionID: string }) {
                 {(row) => (
                   <box gap={0} flexDirection="column">
                     <text fg={theme.text}>{row.label}</text>
-                    <text fg={theme.primary}>
+                    <text fg={progressColor(theme, row.percent)}>
                       {progress(row.percent)} {row.percent}%
                     </text>
                     <text fg={theme.textMuted}>Resets {formatCodexReset(row.resetsAt)}</text>
