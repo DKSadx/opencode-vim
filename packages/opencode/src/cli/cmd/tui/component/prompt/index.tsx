@@ -73,6 +73,7 @@ import { vimScroll } from "../vim/vim-scroll"
 import { useVimIndicator } from "../vim/vim-indicator"
 import { emptyRows } from "./empty-selection"
 import { promptSubmitBehavior } from "./submit-behavior"
+import { parseSkillsSlashInput } from "./skills-slash-alias"
 import { CONSOLE_MANAGED_ICON, consoleManagedProviderLabel } from "@tui/util/provider-origin"
 
 export type PromptProps = {
@@ -201,6 +202,21 @@ export function Prompt(props: PromptProps) {
     return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, current.providerID, provider)
   })
   const hasRightContent = createMemo(() => Boolean(props.right || activeOrgName()))
+  const openSkillDialog = () => {
+    dialog.replace(() => (
+      <DialogSkill
+        onSelect={(skill) => {
+          input.setText(`/${skill} `)
+          setStore("prompt", {
+            input: `/${skill} `,
+            parts: [],
+          })
+          input.gotoBufferEnd()
+          vimState.resetHistory()
+        }}
+      />
+    ))
+  }
 
   const [scrollbar, setScrollbar] = createSignal<string[] | null>(null)
   function syncScrollbar() {
@@ -759,21 +775,10 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         slash: {
           name: "skills",
+          aliases: ["skills/"],
         },
         onSelect: () => {
-          dialog.replace(() => (
-            <DialogSkill
-              onSelect={(skill) => {
-                input.setText(`/${skill} `)
-                setStore("prompt", {
-                  input: `/${skill} `,
-                  parts: [],
-                })
-                input.gotoBufferEnd()
-                vimState.resetHistory()
-              }}
-            />
-          ))
+          openSkillDialog()
         },
       },
     ]
@@ -1023,13 +1028,20 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return false
     if (autocomplete?.visible) return false
     if (!store.prompt.input) return false
-    const agent = local.agent.current()
-    if (!agent) return false
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
       return true
     }
+
+    if (parseSkillsSlashInput(store.prompt.input.split("\n")[0]).kind === "picker") {
+      openSkillDialog()
+      return true
+    }
+
+    const agent = local.agent.current()
+    if (!agent) return false
+
     const selectedModel = local.model.current()
     if (!selectedModel) {
       void promptModelWarning()
@@ -1144,7 +1156,9 @@ export function Prompt(props: PromptProps) {
       inputText.startsWith("/") &&
       iife(() => {
         const firstLine = inputText.split("\n")[0]
-        const command = firstLine.split(" ")[0].slice(1)
+        const parsedSkillsSlash = parseSkillsSlashInput(firstLine)
+        const command =
+          parsedSkillsSlash.kind === "command" ? parsedSkillsSlash.command : firstLine.split(" ")[0].slice(1)
         return sync.data.command.some((x) => x.name === command)
       })
     ) {
@@ -1152,12 +1166,13 @@ export function Prompt(props: PromptProps) {
       const firstLineEnd = inputText.indexOf("\n")
       const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
       const [command, ...firstLineArgs] = firstLine.split(" ")
+      const parsedSkillsSlash = parseSkillsSlashInput(firstLine)
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
       void sdk.client.session.command({
         sessionID,
-        command: command.slice(1),
+        command: parsedSkillsSlash.kind === "command" ? parsedSkillsSlash.command : command.slice(1),
         arguments: args,
         agent: agent.name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
