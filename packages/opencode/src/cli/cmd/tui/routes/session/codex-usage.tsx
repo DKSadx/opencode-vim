@@ -1,9 +1,16 @@
-import { createEffect, createMemo, For, Match, Show, Switch } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useCodexUsage } from "@tui/context/codex-usage"
-import { codexStartupOptions, formatCodexReset, shouldShowCodexUsage } from "@tui/context/codex-usage-machine"
+import {
+  codexStartupOptions,
+  formatCodexReset,
+  nextCodexIntervalState,
+  nextCodexRefreshState,
+  shouldShowCodexUsage,
+} from "@tui/context/codex-usage-machine"
 import { useLocal } from "@tui/context/local"
+import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 
 function progress(percent: number) {
@@ -11,19 +18,31 @@ function progress(percent: number) {
   return `${"█".repeat(filled)}${"░".repeat(10 - filled)}`
 }
 
-export function CodexUsageSidebar() {
+export function CodexUsageSidebar(props: { sessionID: string }) {
   const dialog = useDialog()
   const local = useLocal()
   const codex = useCodexUsage()
+  const sync = useSync()
   const { theme } = useTheme()
+  const [refreshSeeded, setRefreshSeeded] = createSignal(false)
+  const [seenCompletedAssistantID, setSeenCompletedAssistantID] = createSignal<string>()
+  const [intervalActive, setIntervalActive] = createSignal(false)
 
   const providerID = createMemo(() => local.model.current()?.providerID)
   const visible = createMemo(() => shouldShowCodexUsage(providerID()))
   const view = createMemo(() => (visible() ? codex.view() : undefined))
+  const lastAssistant = createMemo(() => {
+    return (sync.data.message[props.sessionID] ?? []).findLast((message) => message.role === "assistant")
+  })
+  let refreshInterval: ReturnType<typeof setInterval> | undefined
 
   createEffect(() => {
     if (!visible()) {
       codex.resetPrompt()
+      batch(() => {
+        setRefreshSeeded(false)
+        setSeenCompletedAssistantID(undefined)
+      })
       return
     }
     if (codex.state.status === "idle") {
@@ -58,6 +77,61 @@ export function CodexUsageSidebar() {
         codex.decline()
       },
     )
+  })
+
+  createEffect(() => {
+    if (!visible()) {
+      batch(() => {
+        setRefreshSeeded(false)
+        setSeenCompletedAssistantID(undefined)
+      })
+      return
+    }
+
+    const next = nextCodexRefreshState({
+      latestAssistantID: lastAssistant()?.id,
+      latestAssistantCompleted: !!lastAssistant()?.time.completed,
+      seenCompletedAssistantID: seenCompletedAssistantID(),
+      seeded: refreshSeeded(),
+    })
+
+    batch(() => {
+      setRefreshSeeded(next.seeded)
+      setSeenCompletedAssistantID(next.seenCompletedAssistantID)
+    })
+
+    if (!next.refresh) return
+    void codex.refresh().catch((error: Error) => {
+      codex.handleError(error)
+    })
+  })
+
+  createEffect(() => {
+    const next = nextCodexIntervalState({
+      visible: visible(),
+      connected: codex.state.status === "connected",
+      active: intervalActive(),
+    })
+
+    if (next.stop && refreshInterval) {
+      clearInterval(refreshInterval)
+      refreshInterval = undefined
+    }
+
+    if (next.start) {
+      refreshInterval = setInterval(() => {
+        void codex.refresh().catch((error: Error) => {
+          codex.handleError(error)
+        })
+      }, 120000)
+    }
+
+    setIntervalActive(next.active)
+  })
+
+  onCleanup(() => {
+    if (!refreshInterval) return
+    clearInterval(refreshInterval)
   })
 
   return (

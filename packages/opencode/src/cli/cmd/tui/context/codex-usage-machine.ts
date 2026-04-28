@@ -87,6 +87,64 @@ export function formatCodexReset(unixSeconds: number) {
   return `${day}/${month}/${year} ${hours}:${minutes}`
 }
 
+export function nextCodexRefreshState(input: {
+  latestAssistantID?: string
+  latestAssistantCompleted: boolean
+  seenCompletedAssistantID?: string
+  seeded: boolean
+}) {
+  if (!input.latestAssistantID) {
+    return {
+      refresh: false,
+      seenCompletedAssistantID: input.seenCompletedAssistantID,
+      seeded: true,
+    }
+  }
+
+  if (!input.seeded) {
+    return {
+      refresh: false,
+      seenCompletedAssistantID: input.latestAssistantCompleted ? input.latestAssistantID : input.seenCompletedAssistantID,
+      seeded: true,
+    }
+  }
+
+  if (!input.latestAssistantCompleted) {
+    return {
+      refresh: false,
+      seenCompletedAssistantID: input.seenCompletedAssistantID,
+      seeded: true,
+    }
+  }
+
+  if (input.seenCompletedAssistantID === input.latestAssistantID) {
+    return {
+      refresh: false,
+      seenCompletedAssistantID: input.seenCompletedAssistantID,
+      seeded: true,
+    }
+  }
+
+  return {
+    refresh: true,
+    seenCompletedAssistantID: input.latestAssistantID,
+    seeded: true,
+  }
+}
+
+export function nextCodexIntervalState(input: {
+  visible: boolean
+  connected: boolean
+  active: boolean
+}) {
+  const nextActive = input.visible && input.connected
+  return {
+    active: nextActive,
+    start: nextActive && !input.active,
+    stop: !nextActive && input.active,
+  }
+}
+
 export function shouldShowCodexUsage(providerID: string | undefined) {
   return providerID === "openai"
 }

@@ -50,6 +50,11 @@ export const { use: useCodexUsage, provider: CodexUsageProvider } = createSimple
         send({ method, params, id })
       })
 
+    const refresh = async () => {
+      if (state.status !== "connected") return
+      apply({ type: "read-succeeded", result: (await request("account/rateLimits/read")) as RateLimitReadResult })
+    }
+
     const connect = async () => {
       apply({ type: "connect-started" })
       socket?.close()
@@ -112,6 +117,7 @@ export const { use: useCodexUsage, provider: CodexUsageProvider } = createSimple
       state,
       view: () => codexUsageView(state),
       connect,
+      refresh,
       start,
       handleError(error: Error) {
         apply({ type: "connection-lost", error: error.message })
