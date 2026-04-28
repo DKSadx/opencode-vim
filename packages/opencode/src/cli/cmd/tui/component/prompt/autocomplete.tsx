@@ -17,6 +17,14 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
+import {
+  formatSkillsAutocompleteDisplay,
+  getSkillsAutocompleteWidth,
+  getSkillsSlashAutocompleteQuery,
+  isSkillsSlashAutocompleteQuery,
+  shouldHideSkillsSlashAutocomplete,
+  shouldPreserveSkillsSlashInput,
+} from "./skills-slash-alias"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -340,6 +348,11 @@ export function Autocomplete(props: {
     },
   )
 
+  const [skills] = createResource(async () => {
+    const result = await sdk.client.app.skills()
+    return result.data ?? []
+  })
+
   const mcpResources = createMemo(() => {
     if (!store.visible || store.visible === "/") return []
 
@@ -427,6 +440,22 @@ export function Autocomplete(props: {
     }))
   })
 
+  const skillCommands = createMemo((): AutocompleteOption[] => {
+    const width = getSkillsAutocompleteWidth(props.anchor()?.width)
+    return (skills() ?? []).map((skill) => ({
+      display: formatSkillsAutocompleteDisplay("/" + skill.name, width),
+      value: skill.name,
+      description: skill.description?.replace(/\s+/g, " ").trim(),
+      onSelect: () => {
+        const newText = "/" + skill.name + " "
+        const cursor = props.input().logicalCursor
+        props.input().deleteRange(0, 0, cursor.row, cursor.col)
+        props.input().insertText(newText)
+        props.input().cursorOffset = Bun.stringWidth(newText)
+      },
+    }))
+  })
+
   const options = createMemo((prev: AutocompleteOption[] | undefined) => {
     const filesValue = files()
     const agentsValue = agents()
@@ -436,6 +465,17 @@ export function Autocomplete(props: {
       store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
 
     const searchValue = search()
+    const skillSearch = isSkillsSlashAutocompleteQuery(searchValue) ? getSkillsSlashAutocompleteQuery(searchValue) : undefined
+
+    if (store.visible === "/" && skillSearch !== undefined) {
+      if (!skillSearch) return skillCommands()
+      return fuzzysort
+        .go(skillSearch, skillCommands(), {
+          keys: [(obj) => obj.value ?? obj.display, "description"],
+          limit: 10,
+        })
+        .map((arr) => arr.obj)
+    }
 
     if (!searchValue) {
       return mixed
@@ -528,9 +568,9 @@ export function Autocomplete(props: {
     })
   }
 
-  function hide() {
+  function hide(preserveInput = false) {
     const text = props.input().plainText
-    if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
+    if (!preserveInput && store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
       // Sync the prompt store immediately since onContentChange is async
@@ -557,6 +597,12 @@ export function Autocomplete(props: {
       },
       onInput(value) {
         if (store.visible) {
+          const active = props.input().getTextRange(store.index, props.input().cursorOffset)
+          if (store.visible === "/" && shouldHideSkillsSlashAutocomplete(active)) {
+            hide(shouldPreserveSkillsSlashInput(active))
+            return
+          }
+
           if (
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
