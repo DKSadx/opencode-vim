@@ -6,14 +6,18 @@ import { vimJump, type VimJump } from "./vim-motion-jump"
 import {
   appendAfterCursor,
   appendLineEnd,
+  changeLineEnd,
   clearSelection,
   deleteLine,
   deleteLineEnd,
+  deleteSpan,
   deleteSelection,
   deleteUnderCursor,
   deleteWord,
   deleteWordBackward,
   findChar,
+  findInnerDelimiterSpan,
+  findOperatorSpan,
   findCharInLine,
   firstNonWhitespace,
   insertLineStart,
@@ -45,6 +49,7 @@ import {
   wordEnd,
   yankLine,
   yankLineSpan,
+  yankSpan,
   yankSelection,
   yankWord,
   yankWordSpan,
@@ -176,6 +181,28 @@ export function createVimHandler(input: {
     const next = input.state.redo(snapshot())
     if (!next) return false
     restore(next)
+    return true
+  }
+
+  function applyOperatorSpan(kind: "c" | "d" | "y", span: { start: number; end: number } | null) {
+    if (!span) return false
+    if (kind === "y") {
+      const reg = yankSpan(input.textarea(), span)
+      if (reg) setRegister(reg, true)
+      return true
+    }
+    if (kind === "d") {
+      edit(() => {
+        const reg = deleteSpan(input.textarea(), span)
+        if (reg) setRegister(reg)
+      })
+      return true
+    }
+    begin(() => {
+      const reg = deleteSpan(input.textarea(), span)
+      if (reg) setRegister(reg)
+      input.state.setMode("insert")
+    })
     return true
   }
 
@@ -319,6 +346,35 @@ export function createVimHandler(input: {
     }
 
     if (input.state.pending() === "c") {
+      if ((key === "f" || key === "t") && !event.shift && !hasModifier(event)) {
+        input.state.setPending(`c${key}`)
+        event.preventDefault()
+        return true
+      }
+
+      if ((isShifted(event, "f") || isShifted(event, "t")) && !hasModifier(event)) {
+        input.state.setPending(`c${key}` as "cF" | "cT")
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "i" && !event.shift && !hasModifier(event)) {
+        input.state.setPending("ci")
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "$" && !hasModifier(event)) {
+        begin(() => {
+          const reg = changeLineEnd(input.textarea())
+          if (reg) setRegister(reg)
+          input.state.clearPending()
+          input.state.setMode("insert")
+        })
+        event.preventDefault()
+        return true
+      }
+
       if (key === "c" && !event.shift && !hasModifier(event)) {
         begin(() => {
           const reg = substituteLine(input.textarea())
@@ -361,6 +417,28 @@ export function createVimHandler(input: {
     }
 
     if (input.state.pending() === "d") {
+      if ((key === "f" || key === "t") && !event.shift && !hasModifier(event)) {
+        input.state.setPending(`d${key}`)
+        event.preventDefault()
+        return true
+      }
+
+      if ((isShifted(event, "f") || isShifted(event, "t")) && !hasModifier(event)) {
+        input.state.setPending(`d${key}` as "dF" | "dT")
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "$" && !hasModifier(event)) {
+        edit(() => {
+          const reg = deleteLineEnd(input.textarea())
+          if (reg) setRegister(reg)
+          input.state.clearPending()
+        })
+        event.preventDefault()
+        return true
+      }
+
       if (key === "d" && !event.shift && !hasModifier(event)) {
         edit(() => {
           const reg = deleteLine(input.textarea())
@@ -400,6 +478,18 @@ export function createVimHandler(input: {
     }
 
     if (input.state.pending() === "y") {
+      if ((key === "f" || key === "t") && !event.shift && !hasModifier(event)) {
+        input.state.setPending(`y${key}`)
+        event.preventDefault()
+        return true
+      }
+
+      if ((isShifted(event, "f") || isShifted(event, "t")) && !hasModifier(event)) {
+        input.state.setPending(`y${key}` as "yF" | "yT")
+        event.preventDefault()
+        return true
+      }
+
       if (key === "y" && !event.shift && !hasModifier(event)) {
         const span = yankLineSpan(input.textarea())
         const reg = yankLine(input.textarea())
@@ -426,6 +516,74 @@ export function createVimHandler(input: {
       }
 
       input.state.clearPending()
+    }
+
+    if (input.state.pending() === "r") {
+      if (isPrintable(event) && !hasModifier(event)) {
+        edit(() => {
+          const offset = input.textarea().cursorOffset
+          replaceUnderCursor(input.textarea(), value(event))
+          input.textarea().cursorOffset = offset
+        })
+        input.state.clearPending()
+        event.preventDefault()
+        return true
+      }
+      input.state.clearPending()
+      event.preventDefault()
+      return true
+    }
+
+    const pending = input.state.pending()
+    if (
+      pending === "cf" ||
+      pending === "cF" ||
+      pending === "ct" ||
+      pending === "cT" ||
+      pending === "df" ||
+      pending === "dF" ||
+      pending === "dt" ||
+      pending === "dT" ||
+      pending === "yf" ||
+      pending === "yF" ||
+      pending === "yt" ||
+      pending === "yT"
+    ) {
+      if (isPrintable(event) && !hasModifier(event)) {
+        const span = findOperatorSpan(
+          input.textarea().plainText,
+          input.textarea().cursorOffset,
+          key,
+          pending[1] === "f" || pending[1] === "t",
+          pending[1] === "t" || pending[1] === "T",
+        )
+        input.state.clearPending()
+        if (!applyOperatorSpan(pending[0] as "c" | "d" | "y", span)) {
+          event.preventDefault()
+          return true
+        }
+        event.preventDefault()
+        return true
+      }
+      input.state.clearPending()
+      event.preventDefault()
+      return true
+    }
+
+    if (pending === "ci") {
+      if (isPrintable(event) && !hasModifier(event)) {
+        const span = findInnerDelimiterSpan(input.textarea().plainText, input.textarea().cursorOffset, key)
+        input.state.clearPending()
+        if (!applyOperatorSpan("c", span)) {
+          event.preventDefault()
+          return true
+        }
+        event.preventDefault()
+        return true
+      }
+      input.state.clearPending()
+      event.preventDefault()
+      return true
     }
 
     const find = input.state.pending()
@@ -547,6 +705,16 @@ export function createVimHandler(input: {
       edit(() => {
         const reg = deleteLineEnd(input.textarea())
         if (reg) setRegister(reg)
+      })
+      event.preventDefault()
+      return true
+    }
+
+    if (isShifted(event, "c") && !hasModifier(event)) {
+      begin(() => {
+        const reg = changeLineEnd(input.textarea())
+        if (reg) setRegister(reg)
+        input.state.setMode("insert")
       })
       event.preventDefault()
       return true
@@ -703,6 +871,22 @@ export function createVimHandler(input: {
         const reg = deleteUnderCursor(input.textarea())
         if (reg) setRegister(reg)
       })
+      event.preventDefault()
+      return true
+    }
+
+    if (key === "s" && !event.shift && !hasModifier(event)) {
+      begin(() => {
+        const reg = deleteUnderCursor(input.textarea())
+        if (reg) setRegister(reg)
+        input.state.setMode("insert")
+      })
+      event.preventDefault()
+      return true
+    }
+
+    if (key === "r" && !event.shift && !hasModifier(event)) {
+      input.state.setPending("r")
       event.preventDefault()
       return true
     }

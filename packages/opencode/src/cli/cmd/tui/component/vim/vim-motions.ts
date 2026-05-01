@@ -347,6 +347,101 @@ export function deleteLineEnd(textarea: TextareaRenderable): VimRegister {
   return { text: yanked, linewise: false }
 }
 
+export function changeLineEnd(textarea: TextareaRenderable): VimRegister {
+  const text = textarea.plainText
+  const start = textarea.cursorOffset
+  const end = lineEnd(text, start)
+  if (end <= start) return null
+  const yanked = text.slice(start, end)
+  deleteOffsets(textarea, start, end)
+  textarea.cursorOffset = start
+  return { text: yanked, linewise: false }
+}
+
+export function deleteSpan(textarea: TextareaRenderable, span: VimSpan): VimRegister {
+  if (span.end <= span.start) return null
+  const yanked = textarea.plainText.slice(span.start, span.end)
+  deleteOffsets(textarea, span.start, span.end)
+  textarea.cursorOffset = Math.min(span.start, Math.max(textarea.plainText.length - 1, 0))
+  return { text: yanked, linewise: false }
+}
+
+export function yankSpan(textarea: TextareaRenderable, span: VimSpan): VimRegister {
+  if (span.end <= span.start) return null
+  return { text: textarea.plainText.slice(span.start, span.end), linewise: false }
+}
+
+export function findOperatorSpan(text: string, offset: number, char: string, forward: boolean, till: boolean) {
+  if (forward) {
+    const end = lineEnd(text, offset)
+    for (let i = offset + 1; i < end; i++) {
+      if (text[i] !== char) continue
+      return { start: offset, end: till ? i : i + 1 }
+    }
+    return null
+  }
+
+  const start = lineStart(text, offset)
+  for (let i = offset - 1; i >= start; i--) {
+    if (text[i] !== char) continue
+    return { start: till ? i + 1 : i, end: offset + 1 }
+  }
+  return null
+}
+
+function delimiterPair(delimiter: string) {
+  if (delimiter === "(" || delimiter === ")") return ["(", ")"] as const
+  if (delimiter === "[" || delimiter === "]") return ["[", "]"] as const
+  if (delimiter === "{" || delimiter === "}") return ["{", "}"] as const
+  if (delimiter === '"' || delimiter === "'" || delimiter === "`") return [delimiter, delimiter] as const
+  return null
+}
+
+export function findInnerDelimiterSpan(text: string, offset: number, delimiter: string) {
+  const pair = delimiterPair(delimiter)
+  if (!pair) return null
+  if (pair[0] === pair[1]) {
+    const start = text.lastIndexOf(pair[0], offset)
+    if (start === -1) return null
+    const end = text.indexOf(pair[1], offset)
+    if (end <= start) return null
+    return { start: start + 1, end }
+  }
+
+  let start = -1
+  let depth = 0
+  for (let i = offset; i >= 0; i--) {
+    if (text[i] === pair[1]) {
+      depth++
+      continue
+    }
+    if (text[i] !== pair[0]) continue
+    if (depth === 0) {
+      start = i
+      break
+    }
+    depth--
+  }
+  if (start === -1) return null
+
+  let end = -1
+  depth = 0
+  for (let i = offset; i < text.length; i++) {
+    if (text[i] === pair[0]) {
+      depth++
+      continue
+    }
+    if (text[i] !== pair[1]) continue
+    if (depth === 0) {
+      end = i
+      break
+    }
+    depth--
+  }
+  if (end <= start) return null
+  return { start: start + 1, end }
+}
+
 export function findChar(textarea: TextareaRenderable, char: string, forward: boolean, till = false, repeat = false) {
   const text = textarea.plainText
   const offset = textarea.cursorOffset
